@@ -218,7 +218,7 @@ static size_t getFilepath(HttpdConnData *connData, char *filepath, size_t len)
 	if (!espfs)
 	{
 		ESP_LOGE(TAG, "espfs not registered");
-		return NULL;
+		return 0;//NULL;
 	}
 	if (connData->cgiArg != &httpdCgiEx) {
 		filepath[0] = '\0';
