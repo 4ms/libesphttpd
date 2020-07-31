@@ -119,7 +119,7 @@ static void ICACHE_FLASH_ATTR wifiStartScan() {
 //This CGI is called from the bit of AJAX-code in wifi.tpl. It will initiate a
 //scan for access points and if available will return the result of an earlier scan.
 //The result is embedded in a bit of JSON parsed by the javascript in wifi.tpl.
-CgiStatus ICACHE_FLASH_ATTR cgiWiFiScan(HttpdConnData *connData) {
+CgiStatus ICACHE_FLASH_ATTR cgiWiFiScan2(HttpdConnData *connData) {
 	int pos=(int)connData->cgiData;
 	int len;
 	char buff[1024];
