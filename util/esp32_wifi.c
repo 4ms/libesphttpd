@@ -1339,6 +1339,32 @@ CgiStatus tplWlan(HttpdConnData *connData, char *token, void **arg)
             strlcpy(buff, "Disabled", sizeof(buff));
             break;
         }
+	} else if(!strcmp(token, "sta_conn")) {
+		result = esp_wifi_sta_get_ap_info(&stcfg);
+		if(result != ESP_OK){
+			snprintf(buff, sizeof(buff) - 1, "not-conn");
+		} else {
+			snprintf(buff, sizeof(buff) - 1, "conn");
+		}
+	} else if(!strcmp(token, "wifimode_short")){
+        result = esp_wifi_get_mode(&mode);
+        if(result != ESP_OK)
+            goto err_out;
+
+        switch(mode){
+			case WIFI_MODE_AP:
+				snprintf(buff, sizeof(buff) - 1, "ap");
+				break;
+			case WIFI_MODE_APSTA:
+				snprintf(buff, sizeof(buff) - 1, "apsta");
+				break;
+			case WIFI_MODE_STA:
+				snprintf(buff, sizeof(buff) - 1, "sta");
+				break;
+			default:
+				snprintf(buff, sizeof(buff) - 1, "unknown");
+				break;
+		}
     } else if(!strcmp(token, "currSsid")){
 
         wifi_config_t cfg;
