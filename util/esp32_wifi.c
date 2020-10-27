@@ -994,7 +994,7 @@ CgiStatus cgiWiFiConnect(HttpdConnData *connData)
         return HTTPD_CGI_DONE;
     }
 
-    redirect = "wifi.tpl";
+    redirect = "wifi.html";
     memset(&cfg, 0x0, sizeof(cfg));
 
     /* We are only changing SSID and password, so fetch the current *\
@@ -1013,24 +1013,24 @@ CgiStatus cgiWiFiConnect(HttpdConnData *connData)
         goto err_out;
     }
 
-    len = httpdFindArg(connData->post.buff, "passwd",
-            (char *) &(sta->password), sizeof(sta->password));
+    len = httpdFindArg(connData->post.buff, "passwd", (char *) &(sta->password), sizeof(sta->password));
     if(len <= 1){
         /* FIXME: What about unsecured APs? */
-        ESP_LOGE(TAG, "[%s] Password parameter missing.", __FUNCTION__);
-        goto err_out;
+        ESP_LOGI(TAG, "[%s] Password parameter missing.", __FUNCTION__);
+        //goto err_out;
     }
 
     /* And of course we want to actually connect to the AP. */
     cfg.connect = true;
 
 #ifndef DEMO_MODE
-    ESP_LOGI(TAG, "Trying to connect to AP %s pw %s",
-            sta->ssid, sta->password);
+    ESP_LOGI(TAG, "Trying to connect to AP %s pw %s", sta->ssid, sta->password);
 
     result = update_wifi(&cfg_state, &cfg);
     if(result == ESP_OK){
-        redirect = "connecting.html";
+        //redirect = "connecting.html";
+        //redirect = "wifi.html";
+		return HTTPD_CGI_DONE;
     }
 #else
     ESP_LOGI(TAG, "Demo mode, not actually connecting to AP %s pw %s",
@@ -1232,11 +1232,18 @@ CgiStatus cgiWiFiAPSettings(HttpdConnData *connData)
             strlcpy((char*)cfg.ap.ap.ssid, ssid, sizeof(cfg.ap.ap.ssid));
             cfg.ap.ap.ssid_len = 0;  // if ssid_len==0, check the SSID until there is a termination character; otherwise, set the SSID length according to softap_config.ssid_len.
             ESP_LOGI(TAG, "[%s] Set ssid=%s", __FUNCTION__, cfg.ap.ap.ssid);
+			//set a blank password if user didn't set one
+			if (!has_arg_pass) {
+				ESP_LOGI(TAG, "[%s] No password given, blanking out password", __FUNCTION__);
+				strlcpy((char*)cfg.ap.ap.password, "", sizeof(cfg.ap.ap.password));
+				cfg.ap.ap.authmode = WIFI_AUTH_OPEN;
+			}
         }
 
         if (has_arg_pass) {
             ESP_LOGI(TAG, "[%s] Setting pass=%s", __FUNCTION__, pass);
             strlcpy((char*)cfg.ap.ap.password, pass, sizeof(cfg.ap.ap.password));
+			cfg.ap.ap.authmode = WIFI_AUTH_WPA2_PSK;
         }
 
         result = update_wifi(&cfg_state, &cfg);
