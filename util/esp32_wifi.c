@@ -990,7 +990,6 @@ CgiStatus cgiWiFiConnect(HttpdConnData *connData)
     esp_err_t result;
 
     if (connData->isConnectionClosed) {
-        /* Connection aborted. Clean up. */
         return HTTPD_CGI_DONE;
     }
 
@@ -1006,8 +1005,7 @@ CgiStatus cgiWiFiConnect(HttpdConnData *connData)
     }
 
     sta = &(cfg.sta.sta);
-    len = httpdFindArg(connData->post.buff, "essid",
-            (char *) &(sta->ssid), sizeof(sta->ssid));
+    len = httpdFindArg(connData->post.buff, "essid", (char *) &(sta->ssid), sizeof(sta->ssid));
     if(len <= 1){
         ESP_LOGE(TAG, "[%s] essid invalid or missing.", __FUNCTION__);
         goto err_out;
@@ -1015,12 +1013,9 @@ CgiStatus cgiWiFiConnect(HttpdConnData *connData)
 
     len = httpdFindArg(connData->post.buff, "passwd", (char *) &(sta->password), sizeof(sta->password));
     if(len <= 1){
-        /* FIXME: What about unsecured APs? */
-        ESP_LOGI(TAG, "[%s] Password parameter missing.", __FUNCTION__);
-        //goto err_out;
+        ESP_LOGI(TAG, "[%s] Password parameter blank.", __FUNCTION__);
     }
 
-    /* And of course we want to actually connect to the AP. */
     cfg.connect = true;
 
 #ifndef DEMO_MODE
@@ -1028,9 +1023,7 @@ CgiStatus cgiWiFiConnect(HttpdConnData *connData)
 
     result = update_wifi(&cfg_state, &cfg);
     if(result == ESP_OK){
-        //redirect = "connecting.html";
-        //redirect = "wifi.html";
-		return HTTPD_CGI_DONE;
+        redirect = "connecting.html";
     }
 #else
     ESP_LOGI(TAG, "Demo mode, not actually connecting to AP %s pw %s",
