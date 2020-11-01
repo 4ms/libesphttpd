@@ -206,7 +206,7 @@ static void ICACHE_FLASH_ATTR reassTimerCb(void *arg) {
 
 //This cgi uses the routines above to connect to a specific access point with the
 //given ESSID using the given password.
-CgiStatus ICACHE_FLASH_ATTR cgiWiFiConnect(HttpdConnData *connData) {
+CgiStatus ICACHE_FLASH_ATTR cgiWiFiConnect__notused(HttpdConnData *connData) {
 	char essid[128];
 	char passwd[128];
 	static os_timer_t reassTimer;
