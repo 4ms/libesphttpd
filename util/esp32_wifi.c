@@ -82,7 +82,7 @@ struct wifi_cfg_state {
 	TickType_t timestamp;
 	enum cfg_state state;
 	struct wifi_cfg saved;
-	struct wifi_cfg new;
+	struct wifi_cfg newcfg;
 };
 
 static struct wifi_cfg_state cfg_state;
@@ -237,11 +237,11 @@ static void put_scan_data(struct scan_data *data) {
 /* Fetch the latest AP scan data and make it available. */
 static void wifi_scan_done(system_event_t *event) {
 	uint16_t num_aps;
-	struct scan_data *old, *new;
+	struct scan_data *old, *newdata;
 	esp_err_t result;
 
 	result = ESP_OK;
-	new = NULL;
+	newdata = NULL;
 
 	/* cgiWifiSetup() must have been called prior to this point. */
 	configASSERT(data_lock != NULL);
@@ -277,22 +277,22 @@ static void wifi_scan_done(system_event_t *event) {
 	}
 
 	/* Allocate and initialise memory for scan data and AP records. */
-	new = calloc(1, sizeof(*new));
-	if (new == NULL) {
+	newdata = calloc(1, sizeof(*newdata));
+	if (newdata == NULL) {
 		ESP_LOGE(TAG, "Out of memory creating scan data");
 		goto err_out;
 	}
 
-	kref_init(&(new->ref_cnt)); // initialises ref_cnt to 1
-	new->ap_records = calloc(num_aps, sizeof(*(new->ap_records)));
-	if (new->ap_records == NULL) {
+	kref_init(&(newdata->ref_cnt)); // initialises ref_cnt to 1
+	newdata->ap_records = calloc(num_aps, sizeof(*(newdata->ap_records)));
+	if (newdata->ap_records == NULL) {
 		ESP_LOGE(TAG, "Out of memory for fetching records");
 		goto err_out;
 	}
 
 	/* Fetch actual AP scan data */
-	new->num_records = num_aps;
-	result = esp_wifi_scan_get_ap_records(&(new->num_records), new->ap_records);
+	newdata->num_records = num_aps;
+	result = esp_wifi_scan_get_ap_records(&(newdata->num_records), newdata->ap_records);
 	if (result != ESP_OK) {
 		ESP_LOGE(TAG, "Error getting scan results");
 		goto err_out;
@@ -304,10 +304,10 @@ static void wifi_scan_done(system_event_t *event) {
 	if (xSemaphoreTake(data_lock, portTICK_PERIOD_MS) == pdTRUE) {
 		/* The new data set will be asigned to the global pointer, so fetch *\
 		\* another reference.                                               */
-		kref_get(&(new->ref_cnt));
+		kref_get(&(newdata->ref_cnt));
 
 		old = last_scan;
-		last_scan = new;
+		last_scan = newdata;
 
 		if (old != NULL) {
 			/* Drop global reference to old data set so it will be freed    *\
@@ -320,8 +320,8 @@ static void wifi_scan_done(system_event_t *event) {
 
 err_out:
 	/* Drop one reference to the new scan data. */
-	if (new != NULL) {
-		put_scan_data(new);
+	if (newdata != NULL) {
+		put_scan_data(newdata);
 	}
 
 	/* Clear scan flag so a new scan can be triggered. */
@@ -681,12 +681,12 @@ static void handle_config_timer(TimerHandle_t timer) {
 
 			/* Try connecting to AP with WPS. First, tear down any connection *\
 			\* we might currently have.                                       */
-			get_wifi_cfg(&cfg_state.new);
-			memset(&cfg_state.new.sta, 0x0, sizeof(cfg_state.new.sta));
-			cfg_state.new.mode = WIFI_MODE_APSTA;
-			cfg_state.new.connect = false;
+			get_wifi_cfg(&cfg_state.newcfg);
+			memset(&cfg_state.newcfg.sta, 0x0, sizeof(cfg_state.newcfg.sta));
+			cfg_state.newcfg.mode = WIFI_MODE_APSTA;
+			cfg_state.newcfg.connect = false;
 
-			set_wifi_cfg(&cfg_state.new);
+			set_wifi_cfg(&cfg_state.newcfg);
 
 			/* Clear previous results and start WPS. */
 			xEventGroupClearBits(wifi_events, BITS_WPS);
@@ -724,9 +724,9 @@ static void handle_config_timer(TimerHandle_t timer) {
 
 				/* Get received STA config, then force APSTA mode, set  *\
 				\* connect flag and trigger update.                     */
-				get_wifi_cfg(&cfg_state.new);
-				cfg_state.new.mode = WIFI_MODE_APSTA;
-				cfg_state.new.connect = true;
+				get_wifi_cfg(&cfg_state.newcfg);
+				cfg_state.newcfg.mode = WIFI_MODE_APSTA;
+				cfg_state.newcfg.connect = true;
 				cfg_state.state = cfg_state_update;
 				delay = CFG_DELAY;
 			} else if (time_after(now, (cfg_state.timestamp + CFG_TIMEOUT)) || (events & BIT_WPS_FAILED)) {
@@ -749,9 +749,10 @@ static void handle_config_timer(TimerHandle_t timer) {
 			/* Start changing WiFi to new configuration. */
 			(void)esp_wifi_scan_stop();
 			(void)esp_wifi_disconnect();
-			set_wifi_cfg(&(cfg_state.new));
+			set_wifi_cfg(&(cfg_state.newcfg));
 
-			if (cfg_state.new.mode == WIFI_MODE_AP || cfg_state.new.mode == WIFI_MODE_NULL || !cfg_state.new.connect) {
+			if (cfg_state.newcfg.mode == WIFI_MODE_AP || cfg_state.newcfg.mode == WIFI_MODE_NULL ||
+				!cfg_state.newcfg.connect) {
 				/* AP-only mode or not connecting, we are done. */
 				cfg_state.state = cfg_state_idle;
 				ESP_LOGI(TAG, "[%s] AP-only mode or not connecting. Aborting. ", __FUNCTION__);
@@ -875,7 +876,7 @@ void cgiWifiEventCb(system_event_t *event) {
  * to cfg->saved, then compare it to the requested new configuration. If    *
  * the two configurations are different, it will store the new config in    *
 \* cfg->new and trigger the asynchronous mechanism to handle the update.    */
-static esp_err_t update_wifi(struct wifi_cfg_state *cfg, struct wifi_cfg *new) {
+static esp_err_t update_wifi(struct wifi_cfg_state *cfg, struct wifi_cfg *newcfg) {
 	bool connected;
 	bool update;
 	esp_err_t result;
@@ -885,7 +886,7 @@ static esp_err_t update_wifi(struct wifi_cfg_state *cfg, struct wifi_cfg *new) {
 		return ESP_ERR_TIMEOUT;
 	}
 
-	if (new->mode != WIFI_MODE_NULL && cfg->state > cfg_state_idle) {
+	if (newcfg->mode != WIFI_MODE_NULL && cfg->state > cfg_state_idle) {
 		ESP_LOGI(TAG, "[%s] Already connecting.", __FUNCTION__);
 		result = ESP_ERR_INVALID_STATE;
 		goto err_out;
@@ -907,7 +908,7 @@ static esp_err_t update_wifi(struct wifi_cfg_state *cfg, struct wifi_cfg *new) {
 		memset(&(cfg->saved.sta), 0x0, sizeof(cfg->saved.sta));
 	}
 
-	memmove(&(cfg->new), new, sizeof(cfg->new));
+	memmove(&(cfg->newcfg), newcfg, sizeof(cfg->newcfg));
 	update = false;
 
 	/* Do some naive checks to see if the new configuration is an actual   *\
