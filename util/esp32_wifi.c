@@ -878,7 +878,6 @@ void cgiWifiEventCb(system_event_t *event) {
 \* cfg->new and trigger the asynchronous mechanism to handle the update.    */
 static esp_err_t update_wifi(struct wifi_cfg_state *cfg, struct wifi_cfg *newcfg) {
 	bool connected;
-	bool update;
 	esp_err_t result;
 
 	if (xSemaphoreTake(cfg->lock, CFG_DELAY) != pdTRUE) {
@@ -909,30 +908,30 @@ static esp_err_t update_wifi(struct wifi_cfg_state *cfg, struct wifi_cfg *newcfg
 	}
 
 	memmove(&(cfg->newcfg), newcfg, sizeof(cfg->newcfg));
-	update = false;
 
-	/* Do some naive checks to see if the new configuration is an actual   *\
-	\* change. Should be more thorough by actually comparing the elements. */
-	if (cfg->new.mode != cfg->saved.mode) {
-		update = true;
-	}
+	// Todo: if a user clicks "Connect" we should not ignore the request;
+	// even if it's the same network, we should attempt a re-connect.
+	// Is there a use-case where we don't want to honor the request to connect?
 
-	if ((new->mode == WIFI_MODE_AP || new->mode == WIFI_MODE_APSTA) &&
-		memcmp(&(cfg->new.ap), &(cfg->saved.ap), sizeof(cfg->new.ap)))
-	{
-		update = true;
-	}
+	// bool update = false;
+	//
+	 /* Do some naive checks to see if the new configuration is an actual   *\
+	 \* change. Should be more thorough by actually comparing the elements. */
+	// if (cfg->newcfg.mode != cfg->saved.mode)
+	// 	update = true;
 
-	if ((new->mode == WIFI_MODE_STA || new->mode == WIFI_MODE_APSTA) &&
-		memcmp(&(cfg->new.sta), &(cfg->saved.sta), sizeof(cfg->new.sta)))
-	{
-		update = true;
-	}
+	// if ((newcfg->mode == WIFI_MODE_AP || newcfg->mode == WIFI_MODE_APSTA) &&
+	// 	memcmp(&(cfg->newcfg.ap), &(cfg->saved.ap), sizeof(cfg->newcfg.ap)))
+	// 	update = true;
+
+	// if ((newcfg->mode == WIFI_MODE_STA || newcfg->mode == WIFI_MODE_APSTA) &&
+	// 	memcmp(&(cfg->newcfg.sta), &(cfg->saved.sta), sizeof(cfg->newcfg.sta)))
+	// 	update = true;
 
 	/* If new config is different, trigger asynchronous update. This gives *\
 	 * the httpd some time to send out the reply before possibly tearing   *
 	\* down the connection.                                                */
-	if (update == true) {
+	// if (update == true) {
 		cfg->state = cfg_state_update;
 		if (xTimerChangePeriod(config_timer, CFG_DELAY, CFG_DELAY) != pdPASS) {
 			cfg->state = cfg_state_failed;
@@ -940,9 +939,9 @@ static esp_err_t update_wifi(struct wifi_cfg_state *cfg, struct wifi_cfg *newcfg
 			goto err_out;
 		}
 		ESP_LOGI(TAG, "[%s] will update wifi", __FUNCTION__);
-	} else {
-		ESP_LOGI(TAG, "[%s] will NOT update wifi", __FUNCTION__);
-	}
+	//} else {
+	//	ESP_LOGI(TAG, "[%s] will NOT update wifi, nothing is changing", __FUNCTION__);
+	//}
 
 err_out:
 	xSemaphoreGive(cfg->lock);
@@ -1009,20 +1008,15 @@ CgiStatus cgiWiFiConnect(HttpdConnData *connData) {
 
 	result = update_wifi(&cfg_state, &cfg);
 	ESP_LOGI(TAG, "updated_wifi() called, result was: %s", esp_err_to_name(result));
-		// if(result == ESP_OK){
-		// redirect = "connecting.html";
-		// }
 	#else
 	ESP_LOGI(TAG, "Demo mode, not actually connecting to AP %s pw %s", sta->ssid, sta->password);
 	#endif
 
-	// httpdRedirect(connData, redirect);
 	httpdStartResponse(connData, 200);
 	httpdHeader(connData, "Content-Type", "text/json");
 	httpdEndHeaders(connData);
-	char buff[40];
-	snprintf(buff, sizeof(buff) - 1, "{\n \"status\": \"ok\"\n }\n");
-	httpdSend(connData, buff, -1);
+	char buff[3] = "ok";
+	httpdSend(connData, buff, 2);
 	return HTTPD_CGI_DONE;
 
 err_out:
